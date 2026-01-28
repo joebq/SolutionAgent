@@ -1,0 +1,151 @@
+#!/bin/bash
+# AVM wrapper script for running various checks
+# This script helps with Azure Verified Modules compliance
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LANDING_ZONE_DIR="$SCRIPT_DIR/landing-zone"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+print_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to run pre-commit checks
+run_pre_commit() {
+    print_info "Running pre-commit checks..."
+    
+    cd "$LANDING_ZONE_DIR"
+    
+    # Check if terraform is installed
+    if ! command -v terraform &> /dev/null; then
+        print_error "Terraform is not installed"
+        exit 1
+    fi
+    
+    # Run terraform fmt
+    print_info "Running terraform fmt..."
+    if terraform fmt -check -recursive .; then
+        print_info "Terraform formatting check passed"
+    else
+        print_warning "Terraform formatting issues found. Running terraform fmt to fix..."
+        terraform fmt -recursive .
+        print_info "Terraform formatting applied"
+    fi
+    
+    # Run terraform validate
+    print_info "Running terraform validate..."
+    if [ ! -d ".terraform" ]; then
+        print_info "Initializing Terraform..."
+        terraform init -backend=false
+    fi
+    
+    if terraform validate; then
+        print_info "Terraform validation passed"
+    else
+        print_error "Terraform validation failed"
+        exit 1
+    fi
+    
+    print_info "Pre-commit checks completed successfully"
+}
+
+# Function to run tflint
+run_tflint() {
+    print_info "Running tflint checks..."
+    
+    cd "$LANDING_ZONE_DIR"
+    
+    # Check if tflint is installed
+    if ! command -v tflint &> /dev/null; then
+        print_warning "tflint is not installed. Skipping tflint checks."
+        print_info "To install tflint, visit: https://github.com/terraform-linters/tflint"
+        return 0
+    fi
+    
+    # Initialize tflint if .tflint.hcl exists
+    if [ -f ".tflint.hcl" ]; then
+        print_info "Initializing tflint..."
+        tflint --init
+    fi
+    
+    # Run tflint
+    print_info "Running tflint..."
+    if tflint; then
+        print_info "tflint checks passed"
+    else
+        print_warning "tflint checks found issues"
+        return 1
+    fi
+}
+
+# Function to run PR checks
+run_pr_check() {
+    print_info "Running PR checks..."
+    
+    # Run pre-commit checks
+    run_pre_commit
+    
+    # Run tflint if available
+    run_tflint || true
+    
+    # Additional PR-specific checks
+    cd "$LANDING_ZONE_DIR"
+    
+    # Check for sensitive data in code
+    print_info "Checking for potential sensitive data patterns..."
+    if grep -r -i -E "(password|secret|key|token)\s*=\s*\"[^\"]+\"" *.tf 2>/dev/null | grep -v "random_password" | grep -v "sensitive"; then
+        print_warning "Potential hardcoded sensitive data found. Please review."
+    else
+        print_info "No obvious sensitive data patterns found"
+    fi
+    
+    # Verify AVM module usage
+    print_info "Verifying AVM module usage..."
+    if grep -q "source.*Azure/avm-" *.tf 2>/dev/null; then
+        print_info "AVM modules detected"
+        grep "source.*Azure/avm-" *.tf | while read -r line; do
+            print_info "  $line"
+        done
+    else
+        print_warning "No AVM modules found in configuration"
+    fi
+    
+    print_info "PR checks completed"
+}
+
+# Main script logic
+case "${1:-pre-commit}" in
+    pre-commit)
+        run_pre_commit
+        ;;
+    tflint)
+        run_tflint
+        ;;
+    pr-check)
+        run_pr_check
+        ;;
+    *)
+        echo "Usage: $0 {pre-commit|tflint|pr-check}"
+        echo ""
+        echo "Commands:"
+        echo "  pre-commit  - Run terraform fmt and validate"
+        echo "  tflint      - Run tflint checks"
+        echo "  pr-check    - Run all PR validation checks"
+        exit 1
+        ;;
+esac

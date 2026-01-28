@@ -1,0 +1,47 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and customize the values
+
+# Azure Region
+location = "eastus"
+
+# Resource Group
+resource_group_name = "rg-landing-zone"
+
+# Virtual Network Configuration
+vnet_name           = "vnet-landing-zone"
+vnet_address_space  = "10.0.0.0/16"
+gateway_subnet_prefix = "10.0.1.0/24"
+bastion_subnet_prefix = "10.0.2.0/24"
+vm_subnet_name      = "snet-vms"
+vm_subnet_prefix    = "10.0.3.0/24"
+
+# VPN Gateway Configuration
+vpn_gateway_name = "vng-landing-zone"
+vpn_gateway_sku  = "VpnGw1"  # Options: VpnGw1, VpnGw2, VpnGw3, VpnGw1AZ, VpnGw2AZ, VpnGw3AZ
+
+# Azure Bastion Configuration
+bastion_name = "bastion-landing-zone"
+bastion_sku  = "Basic"  # Options: Basic, Standard
+
+# Virtual Machine Configuration
+vm_name               = "vm-landing-zone"
+vm_size               = "Standard_D2s_v3"
+vm_admin_username     = "azureadmin"
+windows_server_sku    = "2022-Datacenter"  # Options: 2019-Datacenter, 2022-Datacenter
+vm_availability_zone  = null  # Set to "1", "2", or "3" for availability zones
+
+# Security Configuration
+# IMPORTANT: Change this to your public IP address or IP range for production
+# Example: "203.0.113.0/24" or "203.0.113.5/32"
+allowed_rdp_source_address = "*"  # WARNING: "*" allows access from anywhere
+
+# Tags
+tags = {
+  Environment = "LandingZone"
+  ManagedBy   = "Terraform"
+  Purpose     = "Azure Landing Zone Demo"
+  Owner       = "Your Name"
+}
+
+# Telemetry
+enable_telemetry = true
